@@ -19,6 +19,7 @@
   THE LIKELIHOOD OF SUCH DAMAGES.
  */
 
+#include "mtools.h"
 #include <string.h>
 #include <time.h>
 
@@ -33,45 +34,6 @@ extern int toptind;
 extern int toptreset;
 extern char *toptarg;
 int tgetopt(int nargc, char * const *nargv, const char *ostr);
-
-#if defined(_MSC_VER)
-// Windows-only includes
-#include <windows.h>
-#include <winsock2.h>
-typedef unsigned long socklen_t;
-#define SLEEP_SEC(s) Sleep((s) * 1000)
-#define SLEEP_MSEC(s) Sleep(s)
-#define ERRNO GetLastError()
-#define CLOSESOCKET closesocket
-#define TLONGLONG signed __int64
-
-#else
-// Unix-only includes
-#define HAVE_PTHREAD_H
-#include <signal.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <pthread.h>
-#define SLEEP_SEC(s) sleep(s)
-#define SLEEP_MSEC(s) usleep((s) * 1000)
-#define CLOSESOCKET close
-#define ERRNO errno
-#define SOCKET int
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
-#define TLONGLONG signed long long
-#endif
-
-#if defined(_WIN32)
-#   include <ws2tcpip.h>
-#   include <sys\types.h>
-#   include <sys\timeb.h>
-#   define perror(x) fprintf(stderr,"%s: %d\n",x,GetLastError())
-#endif
-
 
 /* program name (from argv[0] */
 char *prog_name = "xxx";

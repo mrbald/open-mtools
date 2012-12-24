@@ -1,0 +1,32 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mdump", "mdump\mdump.vs2010.vcxproj", "{19F12D6E-ADF0-42A8-A0B9-9FD839995D7D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mpong", "mpong\mpong.vs2010.vcxproj", "{415E7DE8-DCB0-4A74-A0AF-91301DE2B3C4}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "msend", "msend\msend.vs2010.vcxproj", "{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{19F12D6E-ADF0-42A8-A0B9-9FD839995D7D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{19F12D6E-ADF0-42A8-A0B9-9FD839995D7D}.Debug|Win32.Build.0 = Debug|Win32
+		{19F12D6E-ADF0-42A8-A0B9-9FD839995D7D}.Release|Win32.ActiveCfg = Release|Win32
+		{19F12D6E-ADF0-42A8-A0B9-9FD839995D7D}.Release|Win32.Build.0 = Release|Win32
+		{415E7DE8-DCB0-4A74-A0AF-91301DE2B3C4}.Debug|Win32.ActiveCfg = Debug|Win32
+		{415E7DE8-DCB0-4A74-A0AF-91301DE2B3C4}.Debug|Win32.Build.0 = Debug|Win32
+		{415E7DE8-DCB0-4A74-A0AF-91301DE2B3C4}.Release|Win32.ActiveCfg = Release|Win32
+		{415E7DE8-DCB0-4A74-A0AF-91301DE2B3C4}.Release|Win32.Build.0 = Release|Win32
+		{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}.Debug|Win32.Build.0 = Debug|Win32
+		{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}.Release|Win32.ActiveCfg = Release|Win32
+		{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

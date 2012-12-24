@@ -20,6 +20,8 @@
  THE LIKELIHOOD OF SUCH DAMAGES.
  */
 
+#include "mtools.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,42 +36,6 @@ extern int toptind;
 extern int toptreset;
 extern char *toptarg;
 int tgetopt(int nargc, char * const *nargv, const char *ostr);
-
-#if defined(_WIN32)
-// Windows-only includes
-#include <windows.h>
-#include <winsock2.h>
-typedef unsigned long socklen_t;
-#define SLEEP_SEC(s) Sleep((s) * 1000)
-#define SLEEP_MSEC(s) Sleep(s)
-#define ERRNO GetLastError()
-#define CLOSESOCKET closesocket
-#define TLONGLONG signed __int64
-#include <ws2tcpip.h>
-#include <sys\types.h>
-#include <sys\timeb.h>
-#define perror(x) fprintf(stderr,"%s: %d\n",x,GetLastError())
-
-#else
-// Unix-only includes
-#define HAVE_PTHREAD_H
-#include <signal.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <pthread.h>
-#define SLEEP_SEC(s) sleep(s)
-#define SLEEP_MSEC(s) usleep((s) * 1000)
-#define CLOSESOCKET close
-#define ERRNO errno
-#define SOCKET int
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
-#define TLONGLONG signed long long
-#   include <sys/time.h>
-#endif
 
 #define EXIT(x) do { fprintf(stdout, "Exit, file: '%s', line: %d\n", __FILE__, __LINE__);  exit(x);  } while (0)
 
@@ -164,7 +130,7 @@ void current_tv(struct timeval *tv)
 	}
 	QueryPerformanceCounter(&ticks);
 	tv->tv_sec = 0;
-	tv->tv_usec = (1000000 * ticks.QuadPart / freq.QuadPart);
+	tv->tv_usec = (long)(1000000 * ticks.QuadPart / freq.QuadPart);
 	normalize_tv(tv);
 #else 
 	gettimeofday(tv,NULL);
@@ -176,7 +142,6 @@ int main(int argc, char **argv)
 {
 	int opt;
 	int num_parms;
-	char equiv_cmd[1024];
 	char *buff;
 	SOCKET sock;
 	socklen_t fromlen = sizeof(struct sockaddr_in);
@@ -198,9 +163,6 @@ int main(int argc, char **argv)
 	float avg;
 	float cur;
 	float std;
-	int num_sent;
-	float perc_loss;
-	char *pause_slash;
 #if defined(_WIN32)
 	unsigned long int iface_in;
 #else
@@ -503,10 +465,10 @@ int main(int argc, char **argv)
 			delta_tv.tv_sec = end_tv.tv_sec - start_tv.tv_sec;
 			delta_tv.tv_usec = end_tv.tv_usec - start_tv.tv_usec;
 			normalize_tv(&delta_tv);
-			cur = (float)delta_tv.tv_sec;  cur *= 1000000.0;  cur += (float)delta_tv.tv_usec;
-			std += pow((cur - avg), 2);
+			cur = (float)delta_tv.tv_sec;  cur *= 1000000.0f;  cur += (float)delta_tv.tv_usec;
+			std += powf((cur - avg), 2);
 		}
-		std = pow((std / (float)o_samples), 0.5);
+		std = powf((std / (float)o_samples), 0.5f);
 
 		/* print final results */
 		if (min_tv.tv_sec != 0) sprintf(timestr1, "%d%06d", min_tv.tv_sec, min_tv.tv_usec);

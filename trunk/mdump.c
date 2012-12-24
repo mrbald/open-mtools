@@ -23,62 +23,7 @@
   THE LIKELIHOOD OF SUCH DAMAGES.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
-/* Many of the following definitions are intended to make it easier to write
- * portable code between windows and unix. */
-
-/* use our own form of getopt */
-extern int toptind;
-extern int toptreset;
-extern char *toptarg;
-int tgetopt(int nargc, char * const *nargv, const char *ostr);
-
-#if defined(_MSC_VER)
-// Windows-only includes
-#include <windows.h>
-#include <winsock2.h>
-typedef unsigned long socklen_t;
-#define SLEEP_SEC(s) Sleep((s) * 1000)
-#define SLEEP_MSEC(s) Sleep(s)
-#define ERRNO GetLastError()
-#define CLOSESOCKET closesocket
-#define TLONGLONG signed __int64
-
-#else
-// Unix-only includes
-#define HAVE_PTHREAD_H
-#include <signal.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <errno.h>
-#include <pthread.h>
-#define SLEEP_SEC(s) sleep(s)
-#define SLEEP_MSEC(s) usleep((s) * 1000)
-#define CLOSESOCKET close
-#define ERRNO errno
-#define SOCKET int
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
-#define TLONGLONG signed long long
-#endif
-
-#if defined(_WIN32)
-#   include <ws2tcpip.h>
-#   include <sys\types.h>
-#   include <sys\timeb.h>
-#   define perror(x) fprintf(stderr,"%s: %d\n",x,GetLastError())
-#else
-#   include <sys/time.h>
-#endif
-
-#include <string.h>
-#include <time.h>
-
-#define MAXPDU 65536
+#include "mtools.h"
 
 
 /* program name (from argv[0] */
@@ -217,8 +162,8 @@ void dump(FILE *ofile, const char *buffer, int size)
 void currenttv(struct timeval *tv)
 {
 #if defined(_WIN32)
-	struct _timeb tb;
-	_ftime(&tb);
+	struct __timeb32 tb;
+	_ftime32(&tb);
 	tv->tv_sec = tb.time;
 	tv->tv_usec = 1000*tb.millitm;
 #else
@@ -522,7 +467,7 @@ int main(int argc, char **argv)
 			buff[cur_size] = '\0';  /* guarantee trailing null */
 			/* 'stat' message contains num msgs sent */
 			num_sent = atoi(&buff[5]);
-			perc_loss = (float)(num_sent - num_rcvd) * 100.0 / (float)num_sent;
+			perc_loss = (float)(num_sent - num_rcvd) * 100.0f / (float)num_sent;
 			printf("%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
 			printf("%f%% loss\n", perc_loss);
 			fflush(stdout);
