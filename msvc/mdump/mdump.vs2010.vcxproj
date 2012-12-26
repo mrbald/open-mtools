@@ -14,6 +14,7 @@
     <ClInclude Include="..\..\mtools.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\tgetopt.c" />
     <ClCompile Include="..\..\mdump.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
