@@ -15,6 +15,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\msend.c" />
+    <ClCompile Include="..\..\tgetopt.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{1F66ABA4-1309-47F2-902E-D7D0CAFB648F}</ProjectGuid>

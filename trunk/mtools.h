@@ -31,7 +31,6 @@
 #include <errno.h>
 
 
-
 /* Many of the following definitions are intended to make it easier to write
  * portable code between windows and unix. */
 
@@ -39,7 +38,7 @@
 extern int toptind;
 extern int toptreset;
 extern char *toptarg;
-int tgetopt(int nargc, char * const *nargv, const char *ostr);
+extern int tgetopt(int nargc, char * const *nargv, const char *ostr);
 
 #if defined(_MSC_VER)
 // Windows-only includes
