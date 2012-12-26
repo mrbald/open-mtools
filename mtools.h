@@ -1,11 +1,7 @@
 #ifndef MTOOLS_MTOOLS_H
 #define MTOOLS_MTOOLS_H
 
-/* mdump.c */
-/*   Program to dump the contents of all datagrams arriving on a specified
- * multicast address and port.  The dump gives both the hex and ASCII
- * equivalents of the datagram payload.
- * See https://community.informatica.com/solutions/1470 for more info
+/*
  *
  * Author: J.P.Knight@lut.ac.uk (heavily modified by 29West/Informatica)
  *
@@ -24,6 +20,10 @@
   INDIRECT DAMAGES ARISING OUT OF OR RELATED TO THIS AGREEMENT OR THE
   TRANSACTIONS CONTEMPLATED HEREUNDER, EVEN IF INFORMATICA HAS BEEN APPRISED OF
   THE LIKELIHOOD OF SUCH DAMAGES.
+ */
+
+/*
+ * modified by Aviad Rozenhek [aviadr1@gmail.com] for open-mtools
  */
 
 #include <stdio.h>
