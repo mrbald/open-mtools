@@ -19,6 +19,10 @@
   THE LIKELIHOOD OF SUCH DAMAGES.
  */
 
+/*
+ * modified by Aviad Rozenhek [aviadr1@gmail.com] for open-mtools
+ */
+
 #include "mtools.h"
 
 
