@@ -20,11 +20,7 @@
  */
 
 #include "mtools.h"
-#include <string.h>
-#include <time.h>
 
-#include <stdio.h>
-#include <stdlib.h>
 
 /* Many of the following definitions are intended to make it easier to write
  * portable code between windows and unix. */
