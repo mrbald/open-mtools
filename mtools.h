@@ -40,6 +40,11 @@ extern int toptreset;
 extern char *toptarg;
 extern int tgetopt(int nargc, char * const *nargv, const char *ostr);
 
+#define mprintf(opts, format, ...)                                \
+    fprintf(stderr, format, __VA_ARGS__);  fflush(stderr);         \
+    if(opts && opts->o_output) { fprintf(opts->o_output, format, __VA_ARGS__); fflush(opts->o_output); }
+
+
 #if defined(_MSC_VER)
 // Windows-only includes
 #define HAVE_WINSOCK2_H 1
@@ -48,8 +53,6 @@ extern int tgetopt(int nargc, char * const *nargv, const char *ostr);
 #define SLEEP_MSEC(s) Sleep(s)
 #define CLOSESOCKET closesocket
 #define TLONGLONG signed __int64
-#define snprintf _snprintf
-
 
 
 #else
@@ -75,7 +78,7 @@ extern int tgetopt(int nargc, char * const *nargv, const char *ostr);
 #   include <ws2tcpip.h>
 #   include <sys\types.h>
 #   include <sys\timeb.h>
-#   define perror(x) fprintf(stderr,"%s: %d\n",x,GetLastError())
+#   define perror(opts, x) mprintf(opts, "%s: %d\n",x,GetLastError())
 #else
 #   include <sys/time.h>
 #endif
