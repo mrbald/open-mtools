@@ -160,7 +160,7 @@ void dump(FILE *ofile, const char *buffer, int size)
 		textver[i] = ' ';
 	}
 	textver[i] = 0;
-	fprintf(ofile, "\t%s\n",textver); fflush(ofile);
+	fprintf(ofile, "\t%s\n",textver); 
 }  /* dump */
 
 
@@ -202,13 +202,13 @@ int main(int argc, char **argv)
 	opts.prog_name = argv[0];
 
 	buff = malloc(65536 + 1);  /* one extra for trailing null (if needed) */
-	if (buff == NULL) { fprintf(stderr, "malloc failed\n"); exit(1); }
+	if (buff == NULL) { mprintf((&opts), "malloc failed\n"); exit(1); }
 
 #if defined(_WIN32)
 	{
 		WSADATA wsadata;  int wsstatus;
 		if ((wsstatus = WSAStartup(MAKEWORD(2,2), &wsadata)) != 0) {
-			fprintf(stderr,"%s: WSA startup error - %d\n", argv[0], wsstatus);
+			mprintf((&opts),"%s: WSA startup error - %d\n", argv[0], wsstatus);
 			exit(1);
 		}
 	}
@@ -218,13 +218,13 @@ int main(int argc, char **argv)
 
 	/* get system default value for socket buffer size */
 	if((sock = socket(PF_INET,SOCK_DGRAM,0)) == INVALID_SOCKET) {
-		fprintf(stderr, "ERROR: ");  perror("socket");
+		mprintf((&opts), "ERROR: ");  perror((&opts), "socket");
 		exit(1);
 	}
 	sz = sizeof(default_rcvbuf_sz);
 	if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&default_rcvbuf_sz,
 			(socklen_t *)&sz) == SOCKET_ERROR) {
-		fprintf(stderr, "ERROR: ");  perror("getsockopt - SO_RCVBUF");
+		mprintf((&opts), "ERROR: ");  perror((&opts), "getsockopt - SO_RCVBUF");
 		exit(1);
 	}
 	CLOSESOCKET(sock);
@@ -276,12 +276,12 @@ int main(int argc, char **argv)
 			break;
 		  case 'o':
 			if (strlen(toptarg) > 1000) {
-				fprintf(stderr, "ERROR: file name too long (%s)\n", toptarg);
+				mprintf((&opts), "ERROR: file name too long (%s)\n", toptarg);
 				exit(1);
 			}
 			opts.o_output = fopen(toptarg, "w");
 			if (opts.o_output == NULL) {
-				fprintf(stderr, "ERROR: ");  perror("fopen");
+				mprintf((&opts), "ERROR: ");  perror((&opts), "fopen");
 				exit(1);
 			}
 			sprintf(opts.o_output_equiv_opt, "-o %s ", toptarg);
@@ -296,7 +296,7 @@ int main(int argc, char **argv)
 	num_parms = argc - toptind;
 
 	/* handle positional parameters */
-	if(num_parms < 2 > num_parms > 3) {
+	if(num_parms < 2 || num_parms > 3) {
     	usage(&opts, "need 2-3 positional parameters");
 		exit(1);
 	}
@@ -312,8 +312,7 @@ int main(int argc, char **argv)
 			opts.o_tcp ? "-t " : "",
 			opts.o_verify ? "-v " : "",
 			argv[toptind],argv[toptind+1],argv[toptind+2]);
-	printf("Equiv cmd line: %s\n", equiv_cmd); fflush(stdout);
-	if (opts.o_output) { fprintf(opts.o_output, "Equiv cmd line: %s\n", equiv_cmd); fflush(opts.o_output); }
+    mprintf((&opts), "Equiv cmd line: %s\n", equiv_cmd);
 
 	if (opts.o_tcp)
         if(opts.groupaddr != inet_addr("0.0.0.0")) {
@@ -322,7 +321,7 @@ int main(int argc, char **argv)
 
 	if (opts.o_tcp) {
 		if((listensock = socket(PF_INET,SOCK_STREAM,0)) == INVALID_SOCKET) {
-			fprintf(stderr, "ERROR: ");  perror("socket");
+			mprintf((&opts), "ERROR: ");  perror((&opts), "socket");
 			exit(1);
 		}
 		memset((char *)&name,0,sizeof(name));
@@ -330,38 +329,38 @@ int main(int argc, char **argv)
 		name.sin_addr.s_addr = opts.groupaddr;
 		name.sin_port = htons(opts.groupport);
 		if (bind(listensock,(struct sockaddr *)&name,sizeof(name)) == SOCKET_ERROR) {
-			fprintf(stderr, "ERROR: ");  perror("bind");
+			mprintf((&opts), "ERROR: ");  perror((&opts), "bind");
 			exit(1);
 		}
 		if(listen(listensock, 1) == SOCKET_ERROR) {
-			fprintf(stderr, "ERROR: ");  perror("listen");
+			mprintf((&opts), "ERROR: ");  perror((&opts), "listen");
 			exit(1);
 		}
 		if((sock = accept(listensock,(struct sockaddr *)&src,&fromlen)) == INVALID_SOCKET) {
-			fprintf(stderr, "ERROR: ");  perror("accept");
+			mprintf((&opts), "ERROR: ");  perror((&opts), "accept");
 			exit(1);
 		}
 	} else {
 		if((sock = socket(PF_INET,SOCK_DGRAM,0)) == INVALID_SOCKET) {
-			fprintf(stderr, "ERROR: ");  perror("socket");
+			mprintf((&opts), "ERROR: ");  perror((&opts), "socket");
 			exit(1);
 		}
 	}
 
 	if(setsockopt(sock,SOL_SOCKET,SO_RCVBUF,(const char *)&opts.o_rcvbuf_size,
 			sizeof(opts.o_rcvbuf_size)) == SOCKET_ERROR) {
-		printf("WARNING: setsockopt - SO_RCVBUF\n"); fflush(stdout);
-		if (opts.o_output) { fprintf(opts.o_output, "WARNING: "); perror("setsockopt - SO_RCVBUF"); fflush(opts.o_output); }
+		mprintf((&opts), "WARNING: setsockopt - SO_RCVBUF\n");
+		perror((&opts), "setsockopt - SO_RCVBUF");
 	}
 	sz = sizeof(cur_size);
 	if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&cur_size,
 			(socklen_t *)&sz) == SOCKET_ERROR) {
-		fprintf(stderr, "ERROR: ");  perror("getsockopt - SO_RCVBUF");
+		mprintf((&opts), "ERROR: ");
+        perror((&opts), "getsockopt - SO_RCVBUF");
 		exit(1);
 	}
 	if (cur_size < opts.o_rcvbuf_size) {
-		printf("WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size); fflush(stdout);
-		if (opts.o_output) { fprintf(opts.o_output, "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size); fflush(opts.o_output); }
+		mprintf((&opts), "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size);
 	}
 
 	if (opts.groupaddr != inet_addr("0.0.0.0")) {
@@ -376,7 +375,8 @@ int main(int argc, char **argv)
 
 	opt = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) == SOCKET_ERROR) {
-		fprintf(stderr, "ERROR: ");  perror("setsockopt SO_REUSEADDR");
+        mprintf((&opts), "ERROR: ");
+        perror((&opts), "setsockopt SO_REUSEADDR");
 		exit(1);
 	}
 
@@ -389,7 +389,8 @@ int main(int argc, char **argv)
 			/* So OSes don't want you to bind to the m/c group. */
 			name.sin_addr.s_addr = htonl(INADDR_ANY);
 			if (bind(sock,(struct sockaddr *)&name, sizeof(name)) == SOCKET_ERROR) {
-				fprintf(stderr, "ERROR: ");  perror("bind");
+				mprintf((&opts), "ERROR: ");  
+                perror((&opts), "bind");
 				exit(1);
 			}
 		}
@@ -397,7 +398,8 @@ int main(int argc, char **argv)
 		if (opts.groupaddr != inet_addr("0.0.0.0")) {
 			if (setsockopt(sock,IPPROTO_IP,IP_ADD_MEMBERSHIP,
 						(char *)&imr,sizeof(struct ip_mreq)) == SOCKET_ERROR ) {
-				fprintf(stderr, "ERROR: ");  perror("setsockopt - IP_ADD_MEMBERSHIP");
+				mprintf((&opts), "ERROR: ");  
+                perror((&opts), "setsockopt - IP_ADD_MEMBERSHIP");
 				exit(1);
 			}
 		}
@@ -409,8 +411,7 @@ int main(int argc, char **argv)
 		if (opts.o_tcp) {
 			cur_size = recv(sock,buff,65536,0);
 			if (cur_size == 0) {
-				printf("EOF\n");
-				if (opts.o_output) { fprintf(opts.o_output, "EOF\n"); }
+				mprintf((&opts), "EOF\n");
 				break;
 			}
 		} else {
@@ -418,35 +419,26 @@ int main(int argc, char **argv)
 					(struct sockaddr *)&src,&fromlen);
 		}
 		if (cur_size == SOCKET_ERROR) {
-			fprintf(stderr, "ERROR: ");  perror("recv");
+			mprintf((&opts), "ERROR: ");  
+            perror((&opts), "recv");
 			exit(1);
 		}
 
 		if (opts.o_quiet_lvl == 0) {  /* non-quiet: print full dump */
 			currenttv(&tv);
-			printf("%s %s.%d %d bytes:\n",
+			mprintf((&opts),"%s %s.%d %d bytes:\n",
 					format_time(&tv), inet_ntoa(src.sin_addr),
 					ntohs(src.sin_port), cur_size);
 			dump(stdout, buff,cur_size);
 			if (opts.o_output) {
-				fprintf(opts.o_output, "%s %s.%d %d bytes:\n",
-						format_time(&tv), inet_ntoa(src.sin_addr),
-						ntohs(src.sin_port), cur_size);
 				dump(opts.o_output, buff,cur_size);
 			}
 		}
 		if (opts.o_quiet_lvl == 1) {  /* semi-quiet: print datagram summary */
 			currenttv(&tv);
-			printf("%s %s.%d %d bytes\n",  /* no colon */
+			mprintf((&opts),"%s %s.%d %d bytes\n",  /* no colon */
 					format_time(&tv), inet_ntoa(src.sin_addr),
 					ntohs(src.sin_port), cur_size);
-			fflush(stdout);
-			if (opts.o_output) {
-				fprintf(opts.o_output, "%s %s.%d %d bytes\n",  /* no colon */
-						format_time(&tv), inet_ntoa(src.sin_addr),
-						ntohs(src.sin_port), cur_size);
-				fflush(opts.o_output);
-			}
 		}
 
 		if (cur_size > 5 && memcmp(buff, "echo ", 5) == 0) {
@@ -454,8 +446,7 @@ int main(int argc, char **argv)
 			buff[cur_size] = '\0';  /* guarantee trailing null */
 			if (buff[cur_size - 1] == '\n')
 				buff[cur_size - 1] = '\0';  /* strip trailing nl */
-			printf("%s\n", buff); fflush(stdout);
-			if (opts.o_output) { fprintf(opts.o_output, "%s\n", buff); fflush(opts.o_output); }
+			mprintf((&opts),"%s\n", buff);
 
 			/* reset stats */
 			num_rcvd = 0;
@@ -467,14 +458,8 @@ int main(int argc, char **argv)
 			/* 'stat' message contains num msgs sent */
 			num_sent = atoi(&buff[5]);
 			perc_loss = (float)(num_sent - num_rcvd) * 100.0f / (float)num_sent;
-			printf("%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
-			printf("%f%% loss\n", perc_loss);
-			fflush(stdout);
-			if (opts.o_output) {
-				fprintf(opts.o_output, "%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
-				fprintf(opts.o_output, "%f%% loss\n", perc_loss);
-				fflush(opts.o_output);
-			}
+			mprintf((&opts),"%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
+			mprintf((&opts),"%f%% loss\n", perc_loss);
 
 			if (opts.o_stop)
 				exit(0);
@@ -492,8 +477,7 @@ int main(int argc, char **argv)
 			if (opts.o_verify) {
 				buff[cur_size] = '\0';  /* guarantee trailing null */
 				if (cur_seq != strtol(&buff[8], NULL, 16)) {
-					printf("Expected seq %x (hex), got %s\n", cur_seq, &buff[8]);
-					fflush(stdout);
+					mprintf((&opts),"Expected seq %x (hex), got %s\n", cur_seq, &buff[8]);
 					/* resyncronize sequence numbers in case there is loss */
 					cur_seq = strtol(&buff[8], NULL, 16);
 				}
