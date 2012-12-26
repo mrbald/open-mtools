@@ -25,44 +25,45 @@
 
 #include "mtools.h"
 
+typedef struct mdump_options {
+    /* program name (from argv[0] */
+    char *prog_name;
 
-/* program name (from argv[0] */
-char *prog_name = "xxx";
+    /* program options */
+    int o_quiet_lvl;
+    int o_rcvbuf_size;
+    int o_pause_ms;
+    int o_pause_num;
+    int o_verify;
+    int o_stop;
+    int o_tcp;
+    FILE *o_output;
+    char o_output_equiv_opt[1024];
 
-/* program options */
-int o_quiet_lvl;
-int o_rcvbuf_size;
-int o_pause_ms;
-int o_pause_num;
-int o_verify;
-int o_stop;
-int o_tcp;
-FILE *o_output;
-char o_output_equiv_opt[1024];
-
-/* program positional parameters */
-unsigned long int groupaddr;
-unsigned short int groupport;
-char *bind_if;
+    /* program positional parameters */
+    unsigned long int groupaddr;
+    unsigned short int groupport;
+    char *bind_if;
+} mdump_options;
 
 
-char usage_str[] = "[-h] [-o ofile] [-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface]";
+static const char usage_str[] = "[-h] [-o ofile] [-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface]";
 
-void usage(char *msg)
+void usage(mdump_options* opts, char *msg)
 {
 	if (msg != NULL)
 		fprintf(stderr, "\n%s\n\n", msg);
 	fprintf(stderr, "Usage: %s %s\n\n"
 			"(use -h for detailed help)\n",
-			prog_name, usage_str);
+			opts->prog_name, usage_str);
 }  /* usage */
 
 
-void help(char *msg)
+void help(mdump_options* opts, char *msg)
 {
 	if (msg != NULL)
 		fprintf(stderr, "\n%s\n\n", msg);
-	fprintf(stderr, "Usage: %s %s\n", prog_name, usage_str);
+	fprintf(stderr, "Usage: %s %s\n", opts->prog_name, usage_str);
 	fprintf(stderr, "Where:\n"
 			"  -h : help\n"
 			"  -o ofile : print results to file (in addition to stdout)\n"
@@ -192,7 +193,9 @@ int main(int argc, char **argv)
 	int cur_seq;
 	char *pause_slash;
 
-	prog_name = argv[0];
+    mdump_options opts;
+    memset(&opts, sizeof(opts), 0);
+	opts.prog_name = argv[0];
 
 	buff = malloc(65536 + 1);  /* one extra for trailing null (if needed) */
 	if (buff == NULL) { fprintf(stderr, "malloc failed\n"); exit(1); }
@@ -223,64 +226,64 @@ int main(int argc, char **argv)
 	CLOSESOCKET(sock);
 
 	/* default values for options */
-	o_quiet_lvl = 0;
-	o_rcvbuf_size = 0x400000;  /* 4MB */
-	o_pause_ms = 0;
-	o_pause_num = 0;
-	o_verify = 0;
-	o_stop = 0;
-	o_tcp = 0;
-	o_output = NULL;
-	o_output_equiv_opt[0] = '\0';
+	opts.o_quiet_lvl = 0;
+	opts.o_rcvbuf_size = 0x400000;  /* 4MB */
+	opts.o_pause_ms = 0;
+	opts.o_pause_num = 0;
+	opts.o_verify = 0;
+	opts.o_stop = 0;
+	opts.o_tcp = 0;
+	opts.o_output = NULL;
+	opts.o_output_equiv_opt[0] = '\0';
 
 	/* default values for optional positional params */
-	bind_if = NULL;
+	opts.bind_if = NULL;
 
 	while ((opt = tgetopt(argc, argv, "hqQ:p:r:o:vst")) != EOF) {
 		switch (opt) {
 		  case 'h':
-			help(NULL);  exit(0);
+			help(&opts, NULL);  exit(0);
 			break;
 		  case 'q':
-			o_quiet_lvl = 2;
+			opts.o_quiet_lvl = 2;
 			break;
 		  case 'Q':
-			o_quiet_lvl = atoi(toptarg);
+			opts.o_quiet_lvl = atoi(toptarg);
 			break;
 		  case 'p':
 			pause_slash = strchr(toptarg, '/');
 			if (pause_slash)
-				o_pause_num = atoi(pause_slash+1);
-			o_pause_ms = atoi(toptarg);
+				opts.o_pause_num = atoi(pause_slash+1);
+			opts.o_pause_ms = atoi(toptarg);
 			break;
 		  case 'r':
-			o_rcvbuf_size = atoi(toptarg);
-			if (o_rcvbuf_size == 0)
-				o_rcvbuf_size = default_rcvbuf_sz;
+			opts.o_rcvbuf_size = atoi(toptarg);
+			if (opts.o_rcvbuf_size == 0)
+				opts.o_rcvbuf_size = default_rcvbuf_sz;
 			break;
 		  case 'v':
-			o_verify = 1;
+			opts.o_verify = 1;
 			break;
 		  case 's':
-			o_stop = 1;
+			opts.o_stop = 1;
 			break;
 		  case 't':
-			o_tcp = 1;
+			opts.o_tcp = 1;
 			break;
 		  case 'o':
 			if (strlen(toptarg) > 1000) {
 				fprintf(stderr, "ERROR: file name too long (%s)\n", toptarg);
 				exit(1);
 			}
-			o_output = fopen(toptarg, "w");
-			if (o_output == NULL) {
+			opts.o_output = fopen(toptarg, "w");
+			if (opts.o_output == NULL) {
 				fprintf(stderr, "ERROR: ");  perror("fopen");
 				exit(1);
 			}
-			sprintf(o_output_equiv_opt, "-o %s ", toptarg);
+			sprintf(opts.o_output_equiv_opt, "-o %s ", toptarg);
 			break;
 		  default:
-			usage("unrecognized option");
+			usage(&opts, "unrecognized option");
 			exit(1);
 			break;
 		}  /* switch */
@@ -289,47 +292,39 @@ int main(int argc, char **argv)
 	num_parms = argc - toptind;
 
 	/* handle positional parameters */
-	if (num_parms == 2) {
-		groupaddr = inet_addr(argv[toptind]);
-		groupport = (unsigned short)atoi(argv[toptind+1]);
-		sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s",
-				o_output_equiv_opt, o_pause_ms, o_quiet_lvl, o_rcvbuf_size,
-				o_stop ? "-s " : "",
-				o_tcp ? "-t " : "",
-				o_verify ? "-v " : "",
-				argv[toptind],argv[toptind+1]);
-		printf("Equiv cmd line: %s\n", equiv_cmd); fflush(stdout);
-		if (o_output) { fprintf(o_output, "Equiv cmd line: %s\n", equiv_cmd); fflush(o_output); }
-	} else if (num_parms == 3) {
-		groupaddr = inet_addr(argv[toptind]);
-		groupport = (unsigned short)atoi(argv[toptind+1]);
-		bind_if  = argv[toptind+2];
-		sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s %s",
-				o_output_equiv_opt, o_pause_ms, o_quiet_lvl, o_rcvbuf_size,
-				o_stop ? "-s " : "",
-				o_tcp ? "-t " : "",
-				o_verify ? "-v " : "",
-				argv[toptind],argv[toptind+1],argv[toptind+2]);
-		printf("Equiv cmd line: %s\n", equiv_cmd); fflush(stdout);
-		if (o_output) { fprintf(o_output, "Equiv cmd line: %s\n", equiv_cmd); fflush(o_output); }
-	} else {
-		usage("need 2-3 positional parameters");
+	if(num_parms < 2 > num_parms > 3) {
+    	usage(&opts, "need 2-3 positional parameters");
 		exit(1);
 	}
 
-	if (o_tcp && groupaddr != inet_addr("0.0.0.0")) {
-		usage("-t incompatible with non-zero multicast group");
+	opts.groupaddr = inet_addr(argv[toptind]);
+	opts.groupport = (unsigned short)atoi(argv[toptind+1]);
+    if(num_parms >= 3)
+        opts.bind_if  = argv[toptind+2];
+
+	sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s %s",
+			opts.o_output_equiv_opt, opts.o_pause_ms, opts.o_quiet_lvl, opts.o_rcvbuf_size,
+			opts.o_stop ? "-s " : "",
+			opts.o_tcp ? "-t " : "",
+			opts.o_verify ? "-v " : "",
+			argv[toptind],argv[toptind+1],argv[toptind+2]);
+	printf("Equiv cmd line: %s\n", equiv_cmd); fflush(stdout);
+	if (opts.o_output) { fprintf(opts.o_output, "Equiv cmd line: %s\n", equiv_cmd); fflush(opts.o_output); }
+
+	if (opts.o_tcp)
+        if(opts.groupaddr != inet_addr("0.0.0.0")) {
+		usage(&opts, "-t incompatible with non-zero multicast group");
 	}
 
-	if (o_tcp) {
+	if (opts.o_tcp) {
 		if((listensock = socket(PF_INET,SOCK_STREAM,0)) == INVALID_SOCKET) {
 			fprintf(stderr, "ERROR: ");  perror("socket");
 			exit(1);
 		}
 		memset((char *)&name,0,sizeof(name));
 		name.sin_family = AF_INET;
-		name.sin_addr.s_addr = groupaddr;
-		name.sin_port = htons(groupport);
+		name.sin_addr.s_addr = opts.groupaddr;
+		name.sin_port = htons(opts.groupport);
 		if (bind(listensock,(struct sockaddr *)&name,sizeof(name)) == SOCKET_ERROR) {
 			fprintf(stderr, "ERROR: ");  perror("bind");
 			exit(1);
@@ -349,10 +344,10 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if(setsockopt(sock,SOL_SOCKET,SO_RCVBUF,(const char *)&o_rcvbuf_size,
-			sizeof(o_rcvbuf_size)) == SOCKET_ERROR) {
+	if(setsockopt(sock,SOL_SOCKET,SO_RCVBUF,(const char *)&opts.o_rcvbuf_size,
+			sizeof(opts.o_rcvbuf_size)) == SOCKET_ERROR) {
 		printf("WARNING: setsockopt - SO_RCVBUF\n"); fflush(stdout);
-		if (o_output) { fprintf(o_output, "WARNING: "); perror("setsockopt - SO_RCVBUF"); fflush(o_output); }
+		if (opts.o_output) { fprintf(opts.o_output, "WARNING: "); perror("setsockopt - SO_RCVBUF"); fflush(opts.o_output); }
 	}
 	sz = sizeof(cur_size);
 	if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&cur_size,
@@ -360,16 +355,16 @@ int main(int argc, char **argv)
 		fprintf(stderr, "ERROR: ");  perror("getsockopt - SO_RCVBUF");
 		exit(1);
 	}
-	if (cur_size < o_rcvbuf_size) {
-		printf("WARNING: tried to set SO_RCVBUF to %d, only got %d\n", o_rcvbuf_size, cur_size); fflush(stdout);
-		if (o_output) { fprintf(o_output, "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", o_rcvbuf_size, cur_size); fflush(o_output); }
+	if (cur_size < opts.o_rcvbuf_size) {
+		printf("WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size); fflush(stdout);
+		if (opts.o_output) { fprintf(opts.o_output, "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size); fflush(opts.o_output); }
 	}
 
-	if (groupaddr != inet_addr("0.0.0.0")) {
+	if (opts.groupaddr != inet_addr("0.0.0.0")) {
 		memset((char *)&imr,0,sizeof(imr));
-		imr.imr_multiaddr.s_addr = groupaddr;
-		if (bind_if != NULL) {
-			imr.imr_interface.s_addr = inet_addr(bind_if);
+		imr.imr_multiaddr.s_addr = opts.groupaddr;
+		if (opts.bind_if != NULL) {
+			imr.imr_interface.s_addr = inet_addr(opts.bind_if);
 		} else {
 			imr.imr_interface.s_addr = htonl(INADDR_ANY);
 		}
@@ -381,11 +376,11 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if (! o_tcp) {
+	if (! opts.o_tcp) {
 		memset((char *)&name,0,sizeof(name));
 		name.sin_family = AF_INET;
-		name.sin_addr.s_addr = groupaddr;
-		name.sin_port = htons(groupport);
+		name.sin_addr.s_addr = opts.groupaddr;
+		name.sin_port = htons(opts.groupport);
 		if (bind(sock,(struct sockaddr *)&name,sizeof(name)) == SOCKET_ERROR) {
 			/* So OSes don't want you to bind to the m/c group. */
 			name.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -395,7 +390,7 @@ int main(int argc, char **argv)
 			}
 		}
 
-		if (groupaddr != inet_addr("0.0.0.0")) {
+		if (opts.groupaddr != inet_addr("0.0.0.0")) {
 			if (setsockopt(sock,IPPROTO_IP,IP_ADD_MEMBERSHIP,
 						(char *)&imr,sizeof(struct ip_mreq)) == SOCKET_ERROR ) {
 				fprintf(stderr, "ERROR: ");  perror("setsockopt - IP_ADD_MEMBERSHIP");
@@ -407,11 +402,11 @@ int main(int argc, char **argv)
 	cur_seq = 0;
 	num_rcvd = 0;
 	for (;;) {
-		if (o_tcp) {
+		if (opts.o_tcp) {
 			cur_size = recv(sock,buff,65536,0);
 			if (cur_size == 0) {
 				printf("EOF\n");
-				if (o_output) { fprintf(o_output, "EOF\n"); }
+				if (opts.o_output) { fprintf(opts.o_output, "EOF\n"); }
 				break;
 			}
 		} else {
@@ -423,30 +418,30 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 
-		if (o_quiet_lvl == 0) {  /* non-quiet: print full dump */
+		if (opts.o_quiet_lvl == 0) {  /* non-quiet: print full dump */
 			currenttv(&tv);
 			printf("%s %s.%d %d bytes:\n",
 					format_time(&tv), inet_ntoa(src.sin_addr),
 					ntohs(src.sin_port), cur_size);
 			dump(stdout, buff,cur_size);
-			if (o_output) {
-				fprintf(o_output, "%s %s.%d %d bytes:\n",
+			if (opts.o_output) {
+				fprintf(opts.o_output, "%s %s.%d %d bytes:\n",
 						format_time(&tv), inet_ntoa(src.sin_addr),
 						ntohs(src.sin_port), cur_size);
-				dump(o_output, buff,cur_size);
+				dump(opts.o_output, buff,cur_size);
 			}
 		}
-		if (o_quiet_lvl == 1) {  /* semi-quiet: print datagram summary */
+		if (opts.o_quiet_lvl == 1) {  /* semi-quiet: print datagram summary */
 			currenttv(&tv);
 			printf("%s %s.%d %d bytes\n",  /* no colon */
 					format_time(&tv), inet_ntoa(src.sin_addr),
 					ntohs(src.sin_port), cur_size);
 			fflush(stdout);
-			if (o_output) {
-				fprintf(o_output, "%s %s.%d %d bytes\n",  /* no colon */
+			if (opts.o_output) {
+				fprintf(opts.o_output, "%s %s.%d %d bytes\n",  /* no colon */
 						format_time(&tv), inet_ntoa(src.sin_addr),
 						ntohs(src.sin_port), cur_size);
-				fflush(o_output);
+				fflush(opts.o_output);
 			}
 		}
 
@@ -456,7 +451,7 @@ int main(int argc, char **argv)
 			if (buff[cur_size - 1] == '\n')
 				buff[cur_size - 1] = '\0';  /* strip trailing nl */
 			printf("%s\n", buff); fflush(stdout);
-			if (o_output) { fprintf(o_output, "%s\n", buff); fflush(o_output); }
+			if (opts.o_output) { fprintf(opts.o_output, "%s\n", buff); fflush(opts.o_output); }
 
 			/* reset stats */
 			num_rcvd = 0;
@@ -471,13 +466,13 @@ int main(int argc, char **argv)
 			printf("%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
 			printf("%f%% loss\n", perc_loss);
 			fflush(stdout);
-			if (o_output) {
-				fprintf(o_output, "%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
-				fprintf(o_output, "%f%% loss\n", perc_loss);
-				fflush(o_output);
+			if (opts.o_output) {
+				fprintf(opts.o_output, "%d msgs sent, %d received (not including 'stat')\n", num_sent, num_rcvd);
+				fprintf(opts.o_output, "%f%% loss\n", perc_loss);
+				fflush(opts.o_output);
 			}
 
-			if (o_stop)
+			if (opts.o_stop)
 				exit(0);
 
 			/* reset stats */
@@ -485,12 +480,12 @@ int main(int argc, char **argv)
 			cur_seq = 0;
 		}
 		else {  /* not a cmd */
-			if (o_pause_ms > 0 && ( (o_pause_num > 0 && num_rcvd < o_pause_num)
-									|| (o_pause_num == 0) )) {
-				SLEEP_MSEC(o_pause_ms);
+			if (opts.o_pause_ms > 0 && ( (opts.o_pause_num > 0 && num_rcvd < opts.o_pause_num)
+									|| (opts.o_pause_num == 0) )) {
+				SLEEP_MSEC(opts.o_pause_ms);
 			}
 
-			if (o_verify) {
+			if (opts.o_verify) {
 				buff[cur_size] = '\0';  /* guarantee trailing null */
 				if (cur_seq != strtol(&buff[8], NULL, 16)) {
 					printf("Expected seq %x (hex), got %s\n", cur_seq, &buff[8]);
@@ -506,7 +501,7 @@ int main(int argc, char **argv)
 	}  /* for ;; */
 
 	CLOSESOCKET(sock);
-	if (o_tcp)
+	if (opts.o_tcp)
 		CLOSESOCKET(listensock);
 
 	exit(0);

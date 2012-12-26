@@ -28,6 +28,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
+
+
 
 /* Many of the following definitions are intended to make it easier to write
  * portable code between windows and unix. */
@@ -40,17 +43,14 @@ int tgetopt(int nargc, char * const *nargv, const char *ostr);
 
 #if defined(_MSC_VER)
 // Windows-only includes
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <windows.h>
+#define HAVE_WINSOCK2_H 1
 
 #define SLEEP_SEC(s) Sleep((s) * 1000)
 #define SLEEP_MSEC(s) Sleep(s)
-#define ERRNO GetLastError()
 #define CLOSESOCKET closesocket
 #define TLONGLONG signed __int64
-#define strdup _strdup
-#pragma comment(lib, "Ws2_32.lib")
+#define snprintf _snprintf
+
 
 
 #else
@@ -66,7 +66,6 @@ int tgetopt(int nargc, char * const *nargv, const char *ostr);
 #define SLEEP_SEC(s) sleep(s)
 #define SLEEP_MSEC(s) usleep((s) * 1000)
 #define CLOSESOCKET close
-#define ERRNO errno
 #define SOCKET int
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
@@ -86,5 +85,36 @@ int tgetopt(int nargc, char * const *nargv, const char *ostr);
 #include <time.h>
 
 #define MAXPDU 65536
+
+#if HAVE_WINSOCK2_H
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
+#ifndef EPROTONOSUPPORT
+#define EPROTONOSUPPORT WSAEPROTONOSUPPORT
+#endif
+#ifndef ETIMEDOUT
+#define ETIMEDOUT       WSAETIMEDOUT
+#endif
+#ifndef ECONNREFUSED
+#define ECONNREFUSED    WSAECONNREFUSED
+#endif
+#ifndef EINPROGRESS
+#define EINPROGRESS     WSAEINPROGRESS
+#endif
+
+#define getsockopt(a, b, c, d, e) getsockopt(a, b, c, (char*) d, e)
+#define setsockopt(a, b, c, d, e) setsockopt(a, b, c, (const char*) d, e)
+
+#pragma comment(lib, "Ws2_32.lib")
+
+#else
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+
+#endif
+
 
 #endif
