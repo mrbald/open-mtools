@@ -118,5 +118,12 @@ extern int tgetopt(int nargc, char * const *nargv, const char *ostr);
 
 #endif
 
+extern int udp_set_url(struct sockaddr_storage *addr, const char *hostname, int port);
+extern struct addrinfo* udp_resolve_host(const char *hostname, int port, int type, int family, int flags);
+extern int udp_join_multicast_group(int sockfd, struct sockaddr *addr);
+extern int udp_set_multicast_sources(int sockfd, struct sockaddr *addr,
+                                     int addr_len, char **sources,
+                                     int nb_sources, int include);
+
 
 #endif
