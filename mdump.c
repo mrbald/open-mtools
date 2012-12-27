@@ -29,6 +29,8 @@
 
 #include "mtools.h"
 
+#define FF_ARRAY_ELEMS(a)   (sizeof(a) / sizeof((a)[0]))
+
 typedef struct mdump_options {
     /* program name (from argv[0] */
     char *prog_name;
@@ -45,13 +47,30 @@ typedef struct mdump_options {
     char o_output_equiv_opt[1024];
 
     /* program positional parameters */
+    char* groupaddr_name;
     unsigned long int groupaddr;
     unsigned short int groupport;
     char *bind_if;
+
+    /* igmp v3 support */
+    char* igmpv3_sources_string;
+    int igmpv3_sources_num;
+    char* igmpv3_sources[32];
+    int igmpv3_include;
+
+    /* state */
+    struct sockaddr_storage addr;
+    socklen_t addrlen;
+
+    /* tcp state */
+    SOCKET tcp_listen_sock;
+    struct sockaddr_storage tcp_sock_src_addr;
+    int tcp_sock_src_addr_len;
+
 } mdump_options;
 
 
-static const char usage_str[] = "[-h] [-o ofile] [-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface]";
+static const char usage_str[] = "[-h] [-o ofile] [-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface] [igmpv3]";
 
 void usage(mdump_options* opts, char *msg)
 {
@@ -87,6 +106,9 @@ void help(mdump_options* opts, char *msg)
 			"  group : multicast address to receive (required, use '0.0.0.0' for unicast)\n"
 			"  port : destination port (required)\n"
 			"  interface : optional IP addr of local interface (for multi-homed hosts) [INADDR_ANY]\n"
+            "  igmpv3 : optional list of inclusive or exclusive igmpv3 sources\n"
+            "           an example igmpv3 inclusive source list is +192.168.64.32,192.168.64.40\n"
+            "           an example igmpv3 exclusive source list is -80.82.20.10\n"
 	);
 }  /* help */
 
@@ -128,7 +150,8 @@ char *format_time(const struct timeval *tv)
 	static char buff[sizeof(".xx:xx:xx.xxxxxx")];
 	int min;
 
-	unsigned int h = localtime((time_t *)&tv->tv_sec)->tm_hour;
+    time_t tv_sec = tv->tv_sec;
+	unsigned int h = localtime(&tv_sec)->tm_hour;
 	min = (int)(tv->tv_sec % 86400);
 	sprintf(buff,"%02d:%02d:%02d.%06d",h,((int)min%3600)/60,(int)min%60,(int)tv->tv_usec);
 	return buff;
@@ -177,28 +200,235 @@ void currenttv(struct timeval *tv)
 }  /* currenttv */
 
 
+static int parse_igmpv3_sources(const char* sources, char* sources_arr[], int sources_arr_size, int* is_include)
+{
+    int num_sources;
+
+    if(!sources)
+        return 0;
+
+    if(!is_include)
+        return -1;
+
+    while(isspace(sources[0]))
+        sources++;
+
+    if(!sources[0])
+         return 0;
+
+    if(sources[0] == '+')
+        *is_include = 1;
+    else if(sources[0] == '-')
+        *is_include = 0;
+    else 
+        return -1;
+
+    num_sources = 0;
+    ++sources;
+
+    while (1) {
+        char *next = strchr(sources, ',');
+        if (next)
+            *next = '\0';
+        sources_arr[num_sources] = strdup(sources);
+        if (!sources_arr[num_sources])
+            return -1;
+        sources = next + 1;
+        num_sources++;
+        if (num_sources >= sources_arr_size || !next)
+            break;
+    }
+
+    return num_sources;
+}
+
+static void initialize_basic_socket(mdump_options* opts, SOCKET sock)
+{
+    int opt;
+	int cur_size, sz;
+
+	if(setsockopt(sock,SOL_SOCKET,SO_RCVBUF,(const char *)&opts->o_rcvbuf_size,
+			sizeof(opts->o_rcvbuf_size)) == SOCKET_ERROR) {
+		mprintf((opts), "WARNING: setsockopt - SO_RCVBUF\n");
+		perror((opts), "setsockopt - SO_RCVBUF");
+	}
+	sz = sizeof(cur_size);
+	if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&cur_size,
+			(socklen_t *)&sz) == SOCKET_ERROR) {
+		mprintf((opts), "ERROR: ");
+        perror((opts), "getsockopt - SO_RCVBUF");
+		exit(1);
+	}
+	if (cur_size < opts->o_rcvbuf_size) {
+		mprintf((opts), "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts->o_rcvbuf_size, cur_size);
+	}
+    	
+	opt = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) == SOCKET_ERROR) {
+        mprintf((opts), "ERROR: ");
+        perror((opts), "setsockopt SO_REUSEADDR");
+		exit(1);
+	}
+}
+
+static SOCKET initliaze_tcp_socket(mdump_options* opts)
+{
+    SOCKET sock;
+    struct sockaddr_in name;
+
+	if((opts->tcp_listen_sock = socket(PF_INET,SOCK_STREAM,0)) == INVALID_SOCKET) {
+		mprintf(opts, "ERROR: ");  perror(opts, "socket");
+		exit(1);
+	}
+
+
+    memset((char *)&name,0,sizeof(name));
+    name.sin_family = AF_INET;
+    name.sin_addr.s_addr = opts->groupaddr;
+    name.sin_port = htons(opts->groupport);
+    memcpy(&opts->addr, &name, sizeof(name));
+    opts->addrlen = sizeof(name);
+
+	if (bind(opts->tcp_listen_sock, (struct sockaddr*) &opts->addr, opts->addrlen) == SOCKET_ERROR) {
+		mprintf((opts), "ERROR: ");  perror(opts, "bind");
+		exit(1);
+	}
+	if(listen(opts->tcp_listen_sock, 1) == SOCKET_ERROR) {
+		mprintf((opts), "ERROR: ");  perror(opts, "listen");
+		exit(1);
+	}
+	if((sock = accept(opts->tcp_listen_sock, (struct sockaddr *) &opts->tcp_sock_src_addr, &opts->tcp_sock_src_addr_len)) == INVALID_SOCKET) {
+		mprintf((opts), "ERROR: ");  perror(opts, "accept");
+		exit(1);
+	}
+
+    initialize_basic_socket(opts, sock);
+    return sock;
+}
+
+static int udp_socket_create(
+    const char* grouphost, int groupport, 
+    struct sockaddr_storage *addr,
+    socklen_t *addr_len)
+{
+    int udp_fd = -1;
+    struct addrinfo *res0 = NULL, *res = NULL;
+    int family = AF_UNSPEC;
+
+    res0 = udp_resolve_host(NULL, groupport,
+                            SOCK_DGRAM, family, AI_PASSIVE);
+    if (res0 == 0)
+        goto fail;
+    for (res = res0; res; res=res->ai_next) {
+        udp_fd = socket(res->ai_family, SOCK_DGRAM, 0);
+        if (udp_fd != -1) break;
+        //perror("socket");
+    }
+
+    if (udp_fd < 0)
+        goto fail;
+
+    memcpy(addr, res->ai_addr, res->ai_addrlen);
+    *addr_len = res->ai_addrlen;
+
+    freeaddrinfo(res0);
+
+    return udp_fd;
+
+ fail:
+    if (udp_fd >= 0)
+        closesocket(udp_fd);
+    if(res0)
+        freeaddrinfo(res0);
+    return -1;
+}
+
+static SOCKET initliaze_udp_socket(mdump_options* opts)
+{
+    SOCKET sock;
+    struct sockaddr_in name;
+
+	if((sock = socket(PF_INET,SOCK_DGRAM,0)) == INVALID_SOCKET) {
+	    mprintf((opts), "ERROR: ");  perror((opts), "socket");
+		exit(1);
+	}
+
+    initialize_basic_socket(opts, sock);
+
+    memset((char *)&name,0,sizeof(name));
+    name.sin_family = AF_INET;
+    name.sin_addr.s_addr = opts->groupaddr;
+    name.sin_port = htons(opts->groupport);
+    memcpy(&opts->addr, &name, sizeof(name));
+    opts->addrlen = sizeof(name);
+
+	if (bind(sock,(struct sockaddr *)&name, sizeof(name)) == SOCKET_ERROR) {
+		/* So OSes don't want you to bind to the m/c group. */
+		name.sin_addr.s_addr = htonl(INADDR_ANY);
+		if (bind(sock,(struct sockaddr *)&name, sizeof(name)) == SOCKET_ERROR) {
+			mprintf((opts), "ERROR: ");  
+            perror((opts), "bind");
+			exit(1);
+		}
+	}
+
+    if (opts->igmpv3_sources_num == 0 || !opts->igmpv3_include) {
+        if (udp_join_multicast_group(sock, (struct sockaddr *) &opts->addr /*, (opts->bind_if? inet_addr(opts->bind_if) : INADDR_ANY)*/) < 0) {
+            perror((opts), "udp_join_multicast_group");
+            exit(1);
+        }
+
+        if (opts->igmpv3_sources_num) {
+            if (udp_set_multicast_sources(sock, (struct sockaddr *) &opts->addr, opts->addrlen, opts->igmpv3_sources, opts->igmpv3_sources_num, 0) < 0) {
+                perror((opts), "udp_set_multicast_sources");
+                exit(1);
+            }
+        }
+    } else if (opts->igmpv3_include && opts->igmpv3_sources_num) {
+        if (udp_set_multicast_sources(sock, (struct sockaddr *) &opts->addr, opts->addrlen, opts->igmpv3_sources, opts->igmpv3_sources_num, 1) < 0) {
+            perror((opts), "udp_set_multicast_sources");
+            exit(1);
+        }
+    } else {
+        mprintf((opts), "invalid udp settings: inclusive multicast but no sources given");
+        exit(1);
+    }
+
+    return sock;
+}
+
+
+static SOCKET initialize_socket(mdump_options* opts)
+{
+    SOCKET sock;
+
+	if (opts->o_tcp) {
+        sock = initliaze_tcp_socket(opts);
+	} else {
+        sock = initliaze_udp_socket(opts);
+	}
+
+    return sock;
+}
+
 int main(int argc, char **argv)
 {
 	int opt;
 	int num_parms;
 	char equiv_cmd[1024];
 	char *buff;
-	SOCKET listensock;
 	SOCKET sock;
-	socklen_t fromlen = sizeof(struct sockaddr_in);
 	int default_rcvbuf_sz, cur_size, sz;
 	int num_rcvd;
-	struct sockaddr_in name;
-	struct sockaddr_in src;
-	struct ip_mreq imr;
 	struct timeval tv;
 	int num_sent;
 	float perc_loss;
 	int cur_seq;
 	char *pause_slash;
-
+    struct sockaddr_storage src;
     mdump_options opts;
-    memset(&opts, sizeof(opts), 0);
+
+    memset(&opts, 0, sizeof(opts));
 	opts.prog_name = argv[0];
 
 	buff = malloc(65536 + 1);  /* one extra for trailing null (if needed) */
@@ -296,114 +526,44 @@ int main(int argc, char **argv)
 	num_parms = argc - toptind;
 
 	/* handle positional parameters */
-	if(num_parms < 2 || num_parms > 3) {
-    	usage(&opts, "need 2-3 positional parameters");
+	if(num_parms < 2 || num_parms > 4) {
+    	usage(&opts, "need 2-4 positional parameters");
 		exit(1);
 	}
 
-	opts.groupaddr = inet_addr(argv[toptind]);
+    opts.groupaddr_name = argv[toptind];
+	opts.groupaddr = inet_addr(opts.groupaddr_name);
 	opts.groupport = (unsigned short)atoi(argv[toptind+1]);
     if(num_parms >= 3)
         opts.bind_if  = argv[toptind+2];
+    
+    if(num_parms >= 4) {
+        opts.igmpv3_sources_string = argv[toptind+3];
+        opts.igmpv3_sources_num = parse_igmpv3_sources(opts.igmpv3_sources_string, opts.igmpv3_sources, FF_ARRAY_ELEMS(opts.igmpv3_sources), &opts.igmpv3_include);
+        if(opts.igmpv3_sources_num < 0) {
+            mprintf((&opts), "bad igmpv3 sources string");
+            exit(1);
+        }
+    }
 
-	sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s %s",
+	sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s %s %s",
 			opts.o_output_equiv_opt, opts.o_pause_ms, opts.o_quiet_lvl, opts.o_rcvbuf_size,
 			opts.o_stop ? "-s " : "",
 			opts.o_tcp ? "-t " : "",
 			opts.o_verify ? "-v " : "",
-			argv[toptind],argv[toptind+1],argv[toptind+2]);
+			argv[toptind],
+            argv[toptind+1],
+            opts.bind_if,
+            opts.igmpv3_sources_string
+            );
     mprintf((&opts), "Equiv cmd line: %s\n", equiv_cmd);
 
 	if (opts.o_tcp)
-        if(opts.groupaddr != inet_addr("0.0.0.0")) {
+        if(opts.groupaddr != inet_addr("0.0.0.0") || opts.igmpv3_sources != NULL) {
 		usage(&opts, "-t incompatible with non-zero multicast group");
 	}
 
-	if (opts.o_tcp) {
-		if((listensock = socket(PF_INET,SOCK_STREAM,0)) == INVALID_SOCKET) {
-			mprintf((&opts), "ERROR: ");  perror((&opts), "socket");
-			exit(1);
-		}
-		memset((char *)&name,0,sizeof(name));
-		name.sin_family = AF_INET;
-		name.sin_addr.s_addr = opts.groupaddr;
-		name.sin_port = htons(opts.groupport);
-		if (bind(listensock,(struct sockaddr *)&name,sizeof(name)) == SOCKET_ERROR) {
-			mprintf((&opts), "ERROR: ");  perror((&opts), "bind");
-			exit(1);
-		}
-		if(listen(listensock, 1) == SOCKET_ERROR) {
-			mprintf((&opts), "ERROR: ");  perror((&opts), "listen");
-			exit(1);
-		}
-		if((sock = accept(listensock,(struct sockaddr *)&src,&fromlen)) == INVALID_SOCKET) {
-			mprintf((&opts), "ERROR: ");  perror((&opts), "accept");
-			exit(1);
-		}
-	} else {
-		if((sock = socket(PF_INET,SOCK_DGRAM,0)) == INVALID_SOCKET) {
-			mprintf((&opts), "ERROR: ");  perror((&opts), "socket");
-			exit(1);
-		}
-	}
-
-	if(setsockopt(sock,SOL_SOCKET,SO_RCVBUF,(const char *)&opts.o_rcvbuf_size,
-			sizeof(opts.o_rcvbuf_size)) == SOCKET_ERROR) {
-		mprintf((&opts), "WARNING: setsockopt - SO_RCVBUF\n");
-		perror((&opts), "setsockopt - SO_RCVBUF");
-	}
-	sz = sizeof(cur_size);
-	if (getsockopt(sock,SOL_SOCKET,SO_RCVBUF,(char *)&cur_size,
-			(socklen_t *)&sz) == SOCKET_ERROR) {
-		mprintf((&opts), "ERROR: ");
-        perror((&opts), "getsockopt - SO_RCVBUF");
-		exit(1);
-	}
-	if (cur_size < opts.o_rcvbuf_size) {
-		mprintf((&opts), "WARNING: tried to set SO_RCVBUF to %d, only got %d\n", opts.o_rcvbuf_size, cur_size);
-	}
-
-	if (opts.groupaddr != inet_addr("0.0.0.0")) {
-		memset((char *)&imr,0,sizeof(imr));
-		imr.imr_multiaddr.s_addr = opts.groupaddr;
-		if (opts.bind_if != NULL) {
-			imr.imr_interface.s_addr = inet_addr(opts.bind_if);
-		} else {
-			imr.imr_interface.s_addr = htonl(INADDR_ANY);
-		}
-	}
-
-	opt = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) == SOCKET_ERROR) {
-        mprintf((&opts), "ERROR: ");
-        perror((&opts), "setsockopt SO_REUSEADDR");
-		exit(1);
-	}
-
-	if (! opts.o_tcp) {
-		memset((char *)&name,0,sizeof(name));
-		name.sin_family = AF_INET;
-		name.sin_addr.s_addr = opts.groupaddr;
-		name.sin_port = htons(opts.groupport);
-		if (bind(sock,(struct sockaddr *)&name,sizeof(name)) == SOCKET_ERROR) {
-			/* So OSes don't want you to bind to the m/c group. */
-			name.sin_addr.s_addr = htonl(INADDR_ANY);
-			if (bind(sock,(struct sockaddr *)&name, sizeof(name)) == SOCKET_ERROR) {
-				mprintf((&opts), "ERROR: ");  
-                perror((&opts), "bind");
-				exit(1);
-			}
-		}
-
-		if (opts.groupaddr != inet_addr("0.0.0.0")) {
-			if (setsockopt(sock,IPPROTO_IP,IP_ADD_MEMBERSHIP,
-						(char *)&imr,sizeof(struct ip_mreq)) == SOCKET_ERROR ) {
-				mprintf((&opts), "ERROR: ");  
-                perror((&opts), "setsockopt - IP_ADD_MEMBERSHIP");
-				exit(1);
-			}
-		}
-	}
+    sock = initialize_socket(&opts);
 
 	cur_seq = 0;
 	num_rcvd = 0;
@@ -411,12 +571,11 @@ int main(int argc, char **argv)
 		if (opts.o_tcp) {
 			cur_size = recv(sock,buff,65536,0);
 			if (cur_size == 0) {
-				mprintf((&opts), "EOF\n");
-				break;
+				mprintf((&opts), "EOF\n");				break;
 			}
 		} else {
-			cur_size = recvfrom(sock,buff,65536,0,
-					(struct sockaddr *)&src,&fromlen);
+            int fromlen = sizeof(src);
+			cur_size = recvfrom(sock,buff,65536,0, (struct sockaddr*) &src, &fromlen);
 		}
 		if (cur_size == SOCKET_ERROR) {
 			mprintf((&opts), "ERROR: ");  
@@ -427,8 +586,11 @@ int main(int argc, char **argv)
 		if (opts.o_quiet_lvl == 0) {  /* non-quiet: print full dump */
 			currenttv(&tv);
 			mprintf((&opts),"%s %s.%d %d bytes:\n",
-					format_time(&tv), inet_ntoa(src.sin_addr),
-					ntohs(src.sin_port), cur_size);
+					format_time(&tv), 
+                    inet_ntoa(((struct sockaddr_in*)&opts.addr)->sin_addr),
+					ntohs(((struct sockaddr_in*)&opts.addr)->sin_port), 
+                    cur_size
+                    );
 			dump(stdout, buff,cur_size);
 			if (opts.o_output) {
 				dump(opts.o_output, buff,cur_size);
@@ -437,8 +599,8 @@ int main(int argc, char **argv)
 		if (opts.o_quiet_lvl == 1) {  /* semi-quiet: print datagram summary */
 			currenttv(&tv);
 			mprintf((&opts),"%s %s.%d %d bytes\n",  /* no colon */
-					format_time(&tv), inet_ntoa(src.sin_addr),
-					ntohs(src.sin_port), cur_size);
+					format_time(&tv), inet_ntoa(((struct sockaddr_in*)&opts.addr)->sin_addr),
+					ntohs(((struct sockaddr_in*)&opts.addr)->sin_port), cur_size);
 		}
 
 		if (cur_size > 5 && memcmp(buff, "echo ", 5) == 0) {
@@ -489,10 +651,12 @@ int main(int argc, char **argv)
 	}  /* for ;; */
 
 	CLOSESOCKET(sock);
-	if (opts.o_tcp)
-		CLOSESOCKET(listensock);
+	if (opts.o_tcp) {
+		CLOSESOCKET(opts.tcp_listen_sock);
+    }
 
 	exit(0);
 }  /* main */
+
 
 
