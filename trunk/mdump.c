@@ -509,8 +509,8 @@ int main(int argc, char **argv)
 	opts.groupaddr = inet_addr(opts.groupaddr_name);
 	opts.groupport = (unsigned short)atoi(argv[toptind+1]);
         
-    if(num_parms >= 3) {
-        opts.igmpv3_sources_string = argv[toptind+3];
+    if(num_parms >= 2) {
+        opts.igmpv3_sources_string = argv[toptind+2];
         opts.igmpv3_sources_num = parse_igmpv3_sources(opts.igmpv3_sources_string, opts.igmpv3_sources, FF_ARRAY_ELEMS(opts.igmpv3_sources), &opts.igmpv3_include);
         if(opts.igmpv3_sources_num < 0) {
             mprintf((&opts), "bad igmpv3 sources string");
