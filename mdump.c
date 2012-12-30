@@ -44,7 +44,8 @@ typedef struct mdump_options {
     int o_stop;
     int o_tcp;
     FILE *o_output;
-    char o_output_equiv_opt[1024];
+    FILE *O_bin_output;
+    char o_output_equiv_opt[1024], O_dumpfile_equiv_opt[1024];
 
     /* program positional parameters */
     char* groupaddr_name;
@@ -70,7 +71,7 @@ typedef struct mdump_options {
 } mdump_options;
 
 
-static const char usage_str[] = "[-h] [-o ofile] [-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface] [igmpv3]";
+static const char usage_str[] = "[-h] [-o ofile] [-O dumpfile][-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface] [igmpv3]";
 
 void usage(mdump_options* opts, char *msg)
 {
@@ -90,6 +91,7 @@ void help(mdump_options* opts, char *msg)
 	fprintf(stderr, "Where:\n"
 			"  -h : help\n"
 			"  -o ofile : print results to file (in addition to stdout)\n"
+            "  -O dumpfile : dumps packets to a binary file without text formatting\n"
 			"  -p pause_ms[/num] : milliseconds to pause after each receive [0: no pause]\n"
 			"                      and number of loops to apply the pause [0: all loops]\n"
 			"  -Q Quiet_lvl : set quiet level [0] :\n"
@@ -473,7 +475,7 @@ int main(int argc, char **argv)
 	/* default values for optional positional params */
 	opts.bind_if = NULL;
 
-	while ((opt = tgetopt(argc, argv, "hqQ:p:r:o:vst")) != EOF) {
+	while ((opt = tgetopt(argc, argv, "hqQ:p:r:o:O:vst")) != EOF) {
 		switch (opt) {
 		  case 'h':
 			help(&opts, NULL);  exit(0);
@@ -516,6 +518,19 @@ int main(int argc, char **argv)
 			}
 			sprintf(opts.o_output_equiv_opt, "-o %s ", toptarg);
 			break;
+          case 'O':
+			if (strlen(toptarg) > 1000) {
+				mprintf((&opts), "ERROR: file name too long (%s)\n", toptarg);
+				exit(1);
+			}
+			opts.O_bin_output = fopen(toptarg, "wb");
+			if (opts.O_bin_output == NULL) {
+				mprintf((&opts), "ERROR: ");  perror((&opts), "fopen");
+				exit(1);
+			}
+			sprintf(opts.O_dumpfile_equiv_opt, "-O %s ", toptarg);
+			break;
+
 		  default:
 			usage(&opts, "unrecognized option");
 			exit(1);
@@ -546,8 +561,8 @@ int main(int argc, char **argv)
         }
     }
 
-	sprintf(equiv_cmd, "mdump %s-p%d -Q%d -r%d %s%s%s%s %s %s %s",
-			opts.o_output_equiv_opt, opts.o_pause_ms, opts.o_quiet_lvl, opts.o_rcvbuf_size,
+	sprintf(equiv_cmd, "mdump %s%s-p%d -Q%d -r%d %s%s%s%s %s %s %s",
+			opts.o_output_equiv_opt, opts.O_dumpfile_equiv_opt, opts.o_pause_ms, opts.o_quiet_lvl, opts.o_rcvbuf_size,
 			opts.o_stop ? "-s " : "",
 			opts.o_tcp ? "-t " : "",
 			opts.o_verify ? "-v " : "",
@@ -603,6 +618,9 @@ int main(int argc, char **argv)
 					ntohs(((struct sockaddr_in*)&opts.addr)->sin_port), cur_size);
 		}
 
+        if(opts.O_bin_output) { /* binary dump of packets, useful for MPEG-TS */
+			fwrite(buff, cur_size, 1, opts.O_bin_output);			
+		}
 		if (cur_size > 5 && memcmp(buff, "echo ", 5) == 0) {
 			/* echo command */
 			buff[cur_size] = '\0';  /* guarantee trailing null */
