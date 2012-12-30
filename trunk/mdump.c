@@ -51,7 +51,6 @@ typedef struct mdump_options {
     char* groupaddr_name;
     unsigned long int groupaddr;
     unsigned short int groupport;
-    char *bind_if;
 
     /* igmp v3 support */
     char* igmpv3_sources_string;
@@ -71,7 +70,7 @@ typedef struct mdump_options {
 } mdump_options;
 
 
-static const char usage_str[] = "[-h] [-o ofile] [-O dumpfile][-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [interface] [igmpv3]";
+static const char usage_str[] = "[-h] [-o ofile] [-O dumpfile][-p pause_ms[/loops]] [-Q Quiet_lvl] [-q] [-r rcvbuf_size] [-s] [-t] [-u] [-v] group port [igmpv3]";
 
 void usage(mdump_options* opts, char *msg)
 {
@@ -107,7 +106,6 @@ void help(mdump_options* opts, char *msg)
 			"\n"
 			"  group : multicast address to receive (required, use '0.0.0.0' for unicast)\n"
 			"  port : destination port (required)\n"
-			"  interface : optional IP addr of local interface (for multi-homed hosts) [INADDR_ANY]\n"
             "  igmpv3 : optional list of inclusive or exclusive igmpv3 sources\n"
             "           an example igmpv3 inclusive source list is +192.168.64.32,192.168.64.40\n"
             "           an example igmpv3 exclusive source list is -80.82.20.10\n"
@@ -339,7 +337,7 @@ static SOCKET initliaze_udp_socket(mdump_options* opts)
 	}
 
     if (opts->igmpv3_sources_num == 0 || !opts->igmpv3_include) {
-        if (udp_join_multicast_group(sock, (struct sockaddr *) &opts->addr /*, (opts->bind_if? inet_addr(opts->bind_if) : INADDR_ANY)*/) < 0) {
+        if (udp_join_multicast_group(sock, (struct sockaddr *) &opts->addr) < 0) {
             perror((opts), "udp_join_multicast_group");
             exit(1);
         }
@@ -436,9 +434,6 @@ int main(int argc, char **argv)
 	opts.o_output = NULL;
 	opts.o_output_equiv_opt[0] = '\0';
 
-	/* default values for optional positional params */
-	opts.bind_if = NULL;
-
 	while ((opt = tgetopt(argc, argv, "hqQ:p:r:o:O:vst")) != EOF) {
 		switch (opt) {
 		  case 'h':
@@ -505,18 +500,16 @@ int main(int argc, char **argv)
 	num_parms = argc - toptind;
 
 	/* handle positional parameters */
-	if(num_parms < 2 || num_parms > 4) {
-    	usage(&opts, "need 2-4 positional parameters");
+	if(num_parms < 2 || num_parms > 3) {
+    	usage(&opts, "need 2-3 positional parameters");
 		exit(1);
 	}
 
     opts.groupaddr_name = argv[toptind];
 	opts.groupaddr = inet_addr(opts.groupaddr_name);
 	opts.groupport = (unsigned short)atoi(argv[toptind+1]);
-    if(num_parms >= 3)
-        opts.bind_if  = argv[toptind+2];
-    
-    if(num_parms >= 4) {
+        
+    if(num_parms >= 3) {
         opts.igmpv3_sources_string = argv[toptind+3];
         opts.igmpv3_sources_num = parse_igmpv3_sources(opts.igmpv3_sources_string, opts.igmpv3_sources, FF_ARRAY_ELEMS(opts.igmpv3_sources), &opts.igmpv3_include);
         if(opts.igmpv3_sources_num < 0) {
@@ -525,14 +518,13 @@ int main(int argc, char **argv)
         }
     }
 
-	sprintf(equiv_cmd, "mdump %s%s-p%d -Q%d -r%d %s%s%s%s %s %s %s",
+	sprintf(equiv_cmd, "mdump %s%s-p%d -Q%d -r%d %s%s%s%s %s %s",
 			opts.o_output_equiv_opt, opts.O_dumpfile_equiv_opt, opts.o_pause_ms, opts.o_quiet_lvl, opts.o_rcvbuf_size,
 			opts.o_stop ? "-s " : "",
 			opts.o_tcp ? "-t " : "",
 			opts.o_verify ? "-v " : "",
 			argv[toptind],
             argv[toptind+1],
-            opts.bind_if,
             opts.igmpv3_sources_string
             );
     mprintf((&opts), "Equiv cmd line: %s\n", equiv_cmd);
